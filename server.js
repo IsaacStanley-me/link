@@ -32,12 +32,34 @@ if (!db.data) {
   db.data = {
     settings: {
       message: 'Please wait, we\'ll get back to you shortly.',
-      loading_duration: 15,
+      loading_duration: 10,
       updated_at: new Date().toISOString()
     },
     admin_users: []
   };
   await db.write();
+}
+
+// Create default admin account if none exists
+if (db.data.admin_users.length === 0) {
+  const defaultUsername = process.env.ADMIN_USERNAME || 'admin';
+  const defaultPassword = process.env.ADMIN_PASSWORD || 'admin123456';
+  
+  const saltRounds = 10;
+  const passwordHash = bcrypt.hashSync(defaultPassword, saltRounds);
+  
+  db.data.admin_users.push({
+    id: Date.now(),
+    username: defaultUsername,
+    password_hash: passwordHash,
+    created_at: new Date().toISOString()
+  });
+  await db.write();
+  
+  console.log('Default admin account created:');
+  console.log(`Username: ${defaultUsername}`);
+  console.log('Password: [set from environment or default]');
+  console.log('Please change the password after first login!');
 }
 
 // Middleware
