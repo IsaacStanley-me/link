@@ -447,7 +447,7 @@
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          showSuccess(`Link ${data.link_id} created successfully! Username: ${data.username}, Password: ${data.password}`);
+          showSuccess(`Link ${data.link_id} created successfully! Username: ${data.username}. Default password: admin123456`);
           loadLinks();
         } else {
           showError(data.error || 'Failed to create link');

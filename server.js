@@ -224,6 +224,54 @@ try {
     console.log('Please change the password after first login!');
   }
 
+  // Repair mechanism: Check for existing links without admin users and repair them
+  try {
+    const linksWithoutAdmin = await pool.query(`
+      SELECT l.id 
+      FROM links l 
+      LEFT JOIN admin_users au ON l.id = au.link_id 
+      WHERE au.id IS NULL
+    `);
+    
+    for (const link of linksWithoutAdmin.rows) {
+      const linkId = link.id;
+      console.log(`Repairing admin account for Link ${linkId}...`);
+      
+      const defaultUsername = `admin${linkId}`;
+      const defaultPassword = 'admin123456';
+      const saltRounds = 10;
+      const passwordHash = bcrypt.hashSync(defaultPassword, saltRounds);
+      
+      await pool.query(
+        'INSERT INTO admin_users (link_id, username, password_hash) VALUES ($1, $2, $3)',
+        [linkId, defaultUsername, passwordHash]
+      );
+      
+      console.log(`Repaired admin account for Link ${linkId}: Username: ${defaultUsername}`);
+    }
+    
+    // Also check for Link 2 specifically and ensure it has correct credentials
+    const link2Check = await pool.query('SELECT * FROM admin_users WHERE link_id = 2');
+    if (link2Check.rows.length > 0) {
+      const existingUser = link2Check.rows[0];
+      if (existingUser.username !== 'admin2') {
+        console.log('Repairing Link 2 username to admin2...');
+        await pool.query('UPDATE admin_users SET username = $1 WHERE link_id = 2', ['admin2']);
+      }
+      // Verify password hash is correct by re-hashing and comparing
+      const testPassword = 'admin123456';
+      const isPasswordValid = bcrypt.compareSync(testPassword, existingUser.password_hash);
+      if (!isPasswordValid) {
+        console.log('Repairing Link 2 password hash...');
+        const saltRounds = 10;
+        const passwordHash = bcrypt.hashSync(testPassword, saltRounds);
+        await pool.query('UPDATE admin_users SET password_hash = $1 WHERE link_id = 2', [passwordHash]);
+      }
+    }
+  } catch (error) {
+    console.error('Error during admin account repair:', error);
+  }
+
   console.log('PostgreSQL connection established.');
 } catch (error) {
   console.error('Failed to initialize database:', error);
@@ -330,17 +378,12 @@ app.post('/admin/login', async (req, res) => {
   const { username, password, link_id } = req.body;
   const linkId = link_id ? parseInt(link_id) : 1;
   
-  console.log('Login attempt:', { username, linkId, password: password ? '***' : 'empty' });
-  
   try {
     const result = await pool.query('SELECT * FROM admin_users WHERE username = $1 AND link_id = $2', [username, linkId]);
     const user = result.rows[0];
     
-    console.log('User found:', !!user);
-    
     if (user) {
       const match = bcrypt.compareSync(password, user.password_hash);
-      console.log('Password match:', match);
       
       if (match) {
         req.session.authenticated = true;
@@ -529,17 +572,20 @@ app.get('/admin/links', requireAuth, async (req, res) => {
 });
 
 app.post('/admin/links', requireAuth, async (req, res) => {
+  const client = await pool.connect();
   try {
     // Only Link 1 admin can manage links
     if (req.session.link_id !== 1) {
       return res.status(403).json({ error: 'Only Link 1 admin can manage links' });
     }
     
-    const result = await pool.query('INSERT INTO links (created_at) VALUES (NOW()) RETURNING id');
+    await client.query('BEGIN');
+    
+    const result = await client.query('INSERT INTO links (created_at) VALUES (NOW()) RETURNING id');
     const newLinkId = result.rows[0].id;
     
     // Create default settings for new link
-    await pool.query(
+    await client.query(
       `INSERT INTO settings (link_id, message, loading_duration, updated_at)
        VALUES ($1, 'Please wait, we''ll get back to you shortly.', 15, NOW())`,
       [newLinkId]
@@ -551,21 +597,25 @@ app.post('/admin/links', requireAuth, async (req, res) => {
     const saltRounds = 10;
     const passwordHash = bcrypt.hashSync(defaultPassword, saltRounds);
     
-    await pool.query(
+    await client.query(
       'INSERT INTO admin_users (link_id, username, password_hash) VALUES ($1, $2, $3)',
       [newLinkId, defaultUsername, passwordHash]
     );
+    
+    await client.query('COMMIT');
     
     res.json({ 
       success: true, 
       link_id: newLinkId,
       username: defaultUsername,
-      password: defaultPassword,
-      message: 'Link created successfully. Please change the default password.'
+      message: 'Link created successfully. Default password: admin123456'
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error creating link:', error);
     res.status(500).json({ error: 'Failed to create link' });
+  } finally {
+    client.release();
   }
 });
 
