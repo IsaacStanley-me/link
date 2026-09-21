@@ -131,6 +131,73 @@
       color: #999;
       margin-top: 5px;
     }
+    
+    .image-upload-group {
+      margin-bottom: 25px;
+    }
+    
+    .image-preview {
+      max-width: 300px;
+      max-height: 300px;
+      margin-top: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+    
+    .image-preview.show {
+      display: block;
+    }
+    
+    .remove-image-checkbox {
+      margin-top: 10px;
+    }
+    
+    .remove-image-checkbox label {
+      font-weight: normal;
+      display: inline;
+      margin-left: 5px;
+    }
+    
+    .remove-image-checkbox input {
+      margin-right: 5px;
+    }
+    
+    .account-settings {
+      margin-top: 40px;
+      padding-top: 30px;
+      border-top: 2px solid #e0e0e0;
+    }
+    
+    .account-settings h2 {
+      font-size: 20px;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px;
+      font-size: 14px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    
+    input[type="text"]:focus,
+    input[type="password"]:focus {
+      outline: none;
+      border-color: #333;
+    }
+    
+    input[type="file"] {
+      width: 100%;
+      padding: 8px;
+      font-size: 14px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
   </style>
 </head>
 <body>
@@ -140,7 +207,7 @@
     <div id="successMessage" class="success-message">Changes saved successfully</div>
     <div id="errorMessage" class="error-message"></div>
     
-    <form id="settingsForm">
+    <form id="settingsForm" enctype="multipart/form-data">
       <div class="form-group">
         <label for="message">Current Message:</label>
         <textarea id="message" name="message" required></textarea>
@@ -149,14 +216,25 @@
       <div class="form-group">
         <label for="loading_duration">Loading Duration:</label>
         <select id="loading_duration" name="loading_duration" required>
-          <option value="10">10 seconds</option>
-          <option value="11">11 seconds</option>
-          <option value="12">12 seconds</option>
-          <option value="13">13 seconds</option>
-          <option value="14">14 seconds</option>
           <option value="15">15 seconds</option>
+          <option value="16">16 seconds</option>
+          <option value="17">17 seconds</option>
+          <option value="18">18 seconds</option>
+          <option value="19">19 seconds</option>
+          <option value="20">20 seconds</option>
         </select>
-        <div class="info-text">Duration must be between 10 and 15 seconds</div>
+        <div class="info-text">Duration must be between 15 and 20 seconds</div>
+      </div>
+      
+      <div class="image-upload-group">
+        <label for="image">Image (optional):</label>
+        <input type="file" id="image" name="image" accept="image/jpeg,image/jpg,image/png,image/webp">
+        <div class="info-text">Max file size: 5MB. Formats: JPG, JPEG, PNG, WEBP</div>
+        <img id="imagePreview" class="image-preview" alt="Image preview">
+        <div id="removeImageContainer" class="remove-image-checkbox" style="display: none;">
+          <input type="checkbox" id="remove_image" name="remove_image" value="true">
+          <label for="remove_image">Remove image</label>
+        </div>
       </div>
       
       <div class="button-group">
@@ -164,6 +242,35 @@
         <button type="button" class="logout-button" id="logoutButton">Logout</button>
       </div>
     </form>
+    
+    <div class="account-settings">
+      <h2>Account Settings</h2>
+      <form id="accountForm">
+        <div class="form-group">
+          <label for="current_username">Current Username:</label>
+          <input type="text" id="current_username" name="current_username" readonly>
+        </div>
+        
+        <div class="form-group">
+          <label for="new_username">New Username:</label>
+          <input type="text" id="new_username" name="new_username">
+        </div>
+        
+        <div class="form-group">
+          <label for="new_password">New Password:</label>
+          <input type="password" id="new_password" name="new_password">
+        </div>
+        
+        <div class="form-group">
+          <label for="confirm_password">Confirm New Password:</label>
+          <input type="password" id="confirm_password" name="confirm_password">
+        </div>
+        
+        <div class="button-group">
+          <button type="submit" class="save-button">Update Account</button>
+        </div>
+      </form>
+    </div>
   </div>
   
   <script>
@@ -173,19 +280,110 @@
       .then(data => {
         document.getElementById('message').value = data.message;
         document.getElementById('loading_duration').value = data.loading_duration;
+        document.getElementById('current_username').value = data.current_username || 'admin';
+        
+        // Show existing image if present
+        if (data.image_data) {
+          const imagePreview = document.getElementById('imagePreview');
+          imagePreview.src = '/api/image';
+          imagePreview.classList.add('show');
+          document.getElementById('removeImageContainer').style.display = 'block';
+        }
       })
       .catch(error => {
         console.error('Error loading settings:', error);
         showError('Failed to load settings');
       });
     
+    // Image preview
+    document.getElementById('image').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const imagePreview = document.getElementById('imagePreview');
+          imagePreview.src = e.target.result;
+          imagePreview.classList.add('show');
+          document.getElementById('remove_image').checked = false;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+    
     // Save settings
     document.getElementById('settingsForm').addEventListener('submit', function(e) {
       e.preventDefault();
       
-      const formData = new URLSearchParams(new FormData(this));
+      const formData = new FormData(this);
       
       fetch('/admin/update', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showSuccess();
+          // Reload settings to update image preview
+          fetch('/admin/settings')
+            .then(response => response.json())
+            .then(data => {
+              if (data.image_data) {
+                const imagePreview = document.getElementById('imagePreview');
+                imagePreview.src = '/api/image?' + new Date().getTime(); // Force refresh
+                imagePreview.classList.add('show');
+                document.getElementById('removeImageContainer').style.display = 'block';
+              } else {
+                const imagePreview = document.getElementById('imagePreview');
+                imagePreview.classList.remove('show');
+                imagePreview.src = '';
+                document.getElementById('removeImageContainer').style.display = 'none';
+              }
+            });
+        } else {
+          showError(data.error || 'Failed to save changes');
+        }
+      })
+      .catch(error => {
+        console.error('Error saving settings:', error);
+        showError('Failed to save changes');
+      });
+    });
+    
+    // Account settings
+    document.getElementById('accountForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const newUsername = document.getElementById('new_username').value.trim();
+      const newPassword = document.getElementById('new_password').value;
+      const confirmPassword = document.getElementById('confirm_password').value;
+      
+      // Validate
+      if (newUsername && newUsername.length < 3) {
+        showError('Username must be at least 3 characters');
+        return;
+      }
+      
+      if (newPassword && newPassword.length < 6) {
+        showError('Password must be at least 6 characters');
+        return;
+      }
+      
+      if (newPassword && newPassword !== confirmPassword) {
+        showError('Passwords do not match');
+        return;
+      }
+      
+      if (!newUsername && !newPassword) {
+        showError('Please enter a new username or password');
+        return;
+      }
+      
+      const formData = new URLSearchParams();
+      if (newUsername) formData.append('new_username', newUsername);
+      if (newPassword) formData.append('new_password', newPassword);
+      
+      fetch('/admin/update-account', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
@@ -195,14 +393,20 @@
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          showSuccess();
+          showSuccess('Account updated successfully. You may need to log in again.');
+          document.getElementById('new_username').value = '';
+          document.getElementById('new_password').value = '';
+          document.getElementById('confirm_password').value = '';
+          if (data.new_username) {
+            document.getElementById('current_username').value = data.new_username;
+          }
         } else {
-          showError(data.error || 'Failed to save changes');
+          showError(data.error || 'Failed to update account');
         }
       })
       .catch(error => {
-        console.error('Error saving settings:', error);
-        showError('Failed to save changes');
+        console.error('Error updating account:', error);
+        showError('Failed to update account');
       });
     });
     
@@ -224,8 +428,9 @@
       });
     });
     
-    function showSuccess() {
+    function showSuccess(message) {
       const successMsg = document.getElementById('successMessage');
+      successMsg.textContent = message || 'Changes saved successfully';
       successMsg.style.display = 'block';
       setTimeout(() => {
         successMsg.style.display = 'none';
