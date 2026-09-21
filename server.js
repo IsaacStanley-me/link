@@ -45,7 +45,7 @@ try {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS settings (
       id SERIAL PRIMARY KEY,
-      message TEXT NOT NULL DEFAULT 'Please wait, we\'ll get back to you shortly.',
+      message TEXT NOT NULL DEFAULT 'Please wait, we''ll get back to you shortly.',
       loading_duration INTEGER NOT NULL DEFAULT 15,
       image_data BYTEA,
       image_mimetype TEXT,
@@ -140,7 +140,7 @@ try {
   if (parseInt(settingsResult.rows[0].count) === 0) {
    await pool.query(`
       INSERT INTO settings (message, loading_duration, updated_at)
-      VALUES ('Please wait, we\'ll get back to you shortly.', 15, NOW())
+      VALUES ('Please wait, we''ll get back to you shortly.', 15, NOW())
     `);
     console.log('Default settings created.');
   }
