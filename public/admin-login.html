@@ -91,6 +91,10 @@
     <div id="error" class="error" style="display: none;">Invalid username or password</div>
     <form id="loginForm">
       <div class="form-group">
+        <label for="link_id">Link ID (optional, defaults to 1)</label>
+        <input type="number" id="link_id" name="link_id" min="1" value="1">
+      </div>
+      <div class="form-group">
         <label for="username">Username</label>
         <input type="text" id="username" name="username" required>
       </div>
@@ -108,6 +112,12 @@
       document.getElementById('error').style.display = 'block';
     }
     
+    // Set link_id from URL if present
+    const linkIdParam = urlParams.get('link_id');
+    if (linkIdParam) {
+      document.getElementById('link_id').value = linkIdParam;
+    }
+    
     document.getElementById('loginForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const formData = new URLSearchParams(new FormData(this));
@@ -122,12 +132,14 @@
         if (response.redirected) {
           window.location.href = response.url;
         } else {
-          window.location.href = '/admin/login?error=1';
+          const linkId = document.getElementById('link_id').value;
+          window.location.href = `/admin/login?error=1&link_id=${linkId}`;
         }
       })
       .catch(error => {
         console.error('Login error:', error);
-        window.location.href = '/admin/login?error=1';
+        const linkId = document.getElementById('link_id').value;
+        window.location.href = `/admin/login?error=1&link_id=${linkId}`;
       });
     });
   </script>

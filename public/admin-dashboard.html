@@ -128,8 +128,88 @@
     
     .info-text {
       font-size: 12px;
-      color: #999;
+      color: #666;
       margin-top: 5px;
+    }
+    
+    .link-management {
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+    
+    .link-management h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+      color: #333;
+    }
+    
+    .link-list {
+      margin-bottom: 20px;
+    }
+    
+    .link-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: white;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+    
+    .link-info {
+      flex: 1;
+    }
+    
+    .link-id {
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .link-url {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+    
+    .link-actions {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .delete-link-button {
+      padding: 5px 10px;
+      font-size: 12px;
+      background-color: #d32f2f;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .delete-link-button:hover {
+      background-color: #b71c1c;
+    }
+    
+    .delete-link-button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .create-link-button {
+      padding: 10px 20px;
+      font-size: 14px;
+      background-color: #2a5298;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .create-link-button:hover {
+      background-color: #1e3a6e;
     }
     
     .image-upload-group {
@@ -207,6 +287,14 @@
     <div id="successMessage" class="success-message">Changes saved successfully</div>
     <div id="errorMessage" class="error-message"></div>
     
+    <div class="link-management" id="linkManagement">
+      <h2>Link Management</h2>
+      <div class="link-list" id="linkList">
+        <p>Loading links...</p>
+      </div>
+      <button type="button" class="create-link-button" id="createLinkButton">Create New Link</button>
+    </div>
+    
     <form id="settingsForm" enctype="multipart/form-data">
       <div class="form-group">
         <label for="message">Current Message:</label>
@@ -274,8 +362,12 @@
   </div>
   
   <script>
+    // Get link_id from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentLinkId = urlParams.get('link_id') || '1';
+    
     // Load current settings
-    fetch('/admin/settings')
+    fetch(`/admin/settings?link_id=${currentLinkId}`)
       .then(response => response.json())
       .then(data => {
         document.getElementById('message').value = data.message;
@@ -285,7 +377,7 @@
         // Show existing image if present
         if (data.image_data) {
           const imagePreview = document.getElementById('imagePreview');
-          imagePreview.src = '/api/image';
+          imagePreview.src = `/api/image?link_id=${currentLinkId}`;
           imagePreview.classList.add('show');
           document.getElementById('removeImageContainer').style.display = 'block';
         }
@@ -294,6 +386,102 @@
         console.error('Error loading settings:', error);
         showError('Failed to load settings');
       });
+    
+    // Load links
+    function loadLinks() {
+      fetch('/admin/links')
+        .then(response => response.json())
+        .then(links => {
+          const linkList = document.getElementById('linkList');
+          linkList.innerHTML = '';
+          
+          links.forEach(link => {
+            const linkItem = document.createElement('div');
+            linkItem.className = 'link-item';
+            linkItem.innerHTML = `
+              <div class="link-info">
+                <div class="link-id">Link ${link.id}</div>
+                <div class="link-url">
+                  Public: <a href="/link/${link.id}" target="_blank">/link/${link.id}</a> | 
+                  Admin: <a href="/admin/login?link_id=${link.id}" target="_blank">Login</a>
+                </div>
+              </div>
+              <div class="link-actions">
+                <button type="button" class="delete-link-button" 
+                  ${link.id === 1 ? 'disabled' : ''} 
+                  onclick="deleteLink(${link.id})">
+                  Delete
+                </button>
+              </div>
+            `;
+            linkList.appendChild(linkItem);
+          });
+        })
+        .catch(error => {
+          console.error('Error loading links:', error);
+          document.getElementById('linkList').innerHTML = '<p>Failed to load links</p>';
+        });
+    }
+    
+    // Load links on page load (only for Link 1)
+    if (currentLinkId === '1') {
+      loadLinks();
+    } else {
+      document.getElementById('linkList').innerHTML = '<p>Link management is only available for Link 1 admin.</p>';
+      document.getElementById('createLinkButton').style.display = 'none';
+    }
+    
+    // Hide link management section entirely for non-Link 1 admins
+    if (currentLinkId !== '1') {
+      document.getElementById('linkManagement').style.display = 'none';
+    }
+    
+    // Create new link
+    document.getElementById('createLinkButton').addEventListener('click', function() {
+      fetch('/admin/links', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showSuccess(`Link ${data.link_id} created successfully! Username: ${data.username}, Password: ${data.password}`);
+          loadLinks();
+        } else {
+          showError(data.error || 'Failed to create link');
+        }
+      })
+      .catch(error => {
+        console.error('Error creating link:', error);
+        showError('Failed to create link');
+      });
+    });
+    
+    // Delete link
+    function deleteLink(linkId) {
+      if (!confirm(`Are you sure you want to delete Link ${linkId}? This cannot be undone.`)) {
+        return;
+      }
+      
+      fetch(`/admin/links/${linkId}`, {
+        method: 'DELETE'
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showSuccess(`Link ${linkId} deleted successfully`);
+          loadLinks();
+        } else {
+          showError(data.error || 'Failed to delete link');
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting link:', error);
+        showError('Failed to delete link');
+      });
+    }
     
     // Image preview
     document.getElementById('image').addEventListener('change', function(e) {
@@ -325,12 +513,12 @@
         if (data.success) {
           showSuccess();
           // Reload settings to update image preview
-          fetch('/admin/settings')
+          fetch(`/admin/settings?link_id=${currentLinkId}`)
             .then(response => response.json())
             .then(data => {
               if (data.image_data) {
                 const imagePreview = document.getElementById('imagePreview');
-                imagePreview.src = '/api/image?' + new Date().getTime(); // Force refresh
+                imagePreview.src = `/api/image?link_id=${currentLinkId}&` + new Date().getTime(); // Force refresh
                 imagePreview.classList.add('show');
                 document.getElementById('removeImageContainer').style.display = 'block';
               } else {

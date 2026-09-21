@@ -84,7 +84,14 @@
   </div>
   
   <script>
-    fetch('/api/settings')
+    // Get link_id from URL path
+    const pathParts = window.location.pathname.split('/');
+    const linkId = pathParts[2] || '1';
+    
+    const apiUrl = linkId === '1' ? '/api/settings' : `/api/settings?link_id=${linkId}`;
+    const imageUrl = linkId === '1' ? '/api/image' : `/api/image?link_id=${linkId}`;
+    
+    fetch(apiUrl)
       .then(response => response.json())
       .then(data => {
         document.getElementById('message').textContent = data.message;
@@ -92,7 +99,7 @@
         // Load image if exists
         if (data.has_image) {
           const imageElement = document.getElementById('messageImage');
-          imageElement.src = '/api/image';
+          imageElement.src = imageUrl;
           imageElement.classList.add('show');
         }
       })
