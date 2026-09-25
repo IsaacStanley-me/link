@@ -291,13 +291,25 @@ app.use(session({
   }
 }));
 
-// Middleware to check if user is authenticated
+// Middleware to check if user is authenticated and link_id matches
 function requireAuth(req, res, next) {
-  if (req.session.authenticated) {
-    next();
-  } else {
-    res.redirect('/admin/login');
+  if (!req.session.authenticated) {
+    const linkId = req.query.link_id || req.params.linkId || '1';
+    res.redirect(`/admin/login?link_id=${linkId}`);
+    return;
   }
+  
+  // Check if the requested link_id matches the session link_id
+  const requestedLinkId = req.query.link_id || req.params.linkId || '1';
+  const sessionLinkId = req.session.link_id || 1;
+  
+  if (parseInt(requestedLinkId) !== sessionLinkId) {
+    // User is authenticated but for a different link, redirect to login for the requested link
+    res.redirect(`/admin/login?link_id=${requestedLinkId}`);
+    return;
+  }
+  
+  next();
 }
 
 // Middleware to get link_id from request (query param, path param, or default to 1)
@@ -581,6 +593,14 @@ app.post('/admin/links', requireAuth, async (req, res) => {
     
     await client.query('BEGIN');
     
+    // Clean up orphaned data before creating new link
+    await client.query(`
+      DELETE FROM settings WHERE link_id NOT IN (SELECT id FROM links)
+    `);
+    await client.query(`
+      DELETE FROM admin_users WHERE link_id NOT IN (SELECT id FROM links)
+    `);
+    
     const result = await client.query('INSERT INTO links (created_at) VALUES (NOW()) RETURNING id');
     const newLinkId = result.rows[0].id;
     
@@ -613,7 +633,9 @@ app.post('/admin/links', requireAuth, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error creating link:', error);
-    res.status(500).json({ error: 'Failed to create link' });
+    console.error('Error details:', error.message);
+    console.error('Error code:', error.code);
+    res.status(500).json({ error: `Failed to create link: ${error.message}` });
   } finally {
     client.release();
   }
