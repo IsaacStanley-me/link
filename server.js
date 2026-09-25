@@ -642,6 +642,7 @@ app.post('/admin/links', requireAuth, async (req, res) => {
 });
 
 app.delete('/admin/links/:linkId', requireAuth, async (req, res) => {
+  const client = await pool.connect();
   try {
     // Only Link 1 admin can manage links
     if (req.session.link_id !== 1) {
@@ -655,11 +656,35 @@ app.delete('/admin/links/:linkId', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Cannot delete Link 1' });
     }
     
-    await pool.query('DELETE FROM links WHERE id = $1', [linkId]);
+    await client.query('BEGIN');
+    
+    // Check if link exists
+    const linkCheck = await client.query('SELECT id FROM links WHERE id = $1', [linkId]);
+    if (linkCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Link not found' });
+    }
+    
+    // Delete settings first (explicitly, in case CASCADE isn't working)
+    await client.query('DELETE FROM settings WHERE link_id = $1', [linkId]);
+    
+    // Delete admin users
+    await client.query('DELETE FROM admin_users WHERE link_id = $1', [linkId]);
+    
+    // Delete the link
+    await client.query('DELETE FROM links WHERE id = $1', [linkId]);
+    
+    await client.query('COMMIT');
+    
     res.json({ success: true, message: 'Link deleted successfully' });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error deleting link:', error);
-    res.status(500).json({ error: 'Failed to delete link' });
+    console.error('Error details:', error.message);
+    console.error('Error code:', error.code);
+    res.status(500).json({ error: `Failed to delete link: ${error.message}` });
+  } finally {
+    client.release();
   }
 });
 
